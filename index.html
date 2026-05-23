@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Alarm Relay Controller</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f4f4f6;
+            color: #333;
+        }
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .status {
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 8px;
+            border-radius: 4px;
+            background: #eee;
+            text-align: center;
+        }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        button {
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        .btn-connect { grid-column: span 2; background: #007bff; color: white; }
+        .btn-t3 { background: #dc3545; color: white; }
+        .btn-t4 { background: #fd7e14; color: white; }
+        .btn-cont { background: #ffc107; color: #212529; }
+        .btn-off { background: #6c757d; color: white; }
+        button:disabled { background: #ccc; cursor: not-allowed; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>FA Relay Controller</h2>
+    <div id="statusBanner" class="status disconnected">Disconnected from Arduino</div>
+    
+    <div class="grid">
+        <button id="connectBtn" class="btn-connect">Connect to Arduino</button>
+        <button id="t3Btn" class="btn-t3" disabled>Temporal 3 (Fire)</button>
+        <button id="t4Btn" class="btn-t4" disabled>Temporal 4 (CO)</button>
+        <button id="contBtn" class="btn-cont" disabled>Continuous Alert</button>
+        <button id="offBtn" class="btn-off" disabled>System Silence</button>
+    </div>
+</div>
+
+<script>
+    let port;
+    let writer;
+
+    const connectBtn = document.getElementById('connectBtn');
+    const statusBanner = document.getElementById('statusBanner');
+    const actionButtons = [
+        document.getElementById('t3Btn'),
+        document.getElementById('t4Btn'),
+        document.getElementById('contBtn'),
+        document.getElementById('offBtn')
+    ];
+
+    // Connect / Disconnect toggle
+    connectBtn.addEventListener('click', async () => {
+        if (!port) {
+            try {
+                // Request port from user
+                port = await navigator.serial.requestPort();
+                // Open port at the matching 9600 baud rate
+                await port.open({ baudRate: 9600 });
+                
+                writer = port.writable.getWriter();
+                
+                // Update UI state
+                statusBanner.textContent = "Connected to Arduino";
+                statusBanner.className = "status connected";
+                connectBtn.textContent = "Disconnect";
+                actionButtons.forEach(btn => btn.disabled = false);
+            } catch (err) {
+                console.error("Connection failed:", err);
+                alert("Could not connect to serial port.");
+            }
+        } else {
+            // Clean up and close port
+            if (writer) {
+                writer.releaseLock();
+                writer = null;
+            }
+            await port.close();
+            port = null;
+            
+            statusBanner.textContent = "Disconnected from Arduino";
+            statusBanner.className = "status disconnected";
+            connectBtn.textContent = "Connect to Arduino";
+            actionButtons.forEach(btn => btn.disabled = true);
+        }
+    });
+
+    // Send text command helper function
+    async function sendCommand(command) {
+        if (!writer) return;
+        const encoder = new TextEncoder();
+        // Add the newline character so Arduino's readStringUntil('\n') knows the command ended
+        await writer.write(encoder.encode(command + '\n'));
+    }
+
+    // Button Event Listeners
+    document.getElementById('t3Btn').addEventListener('click', () => sendCommand('TEMPORAL3'));
+    document.getElementById('t4Btn').addEventListener('click', () => sendCommand('TEMPORAL4'));
+    document.getElementById('contBtn').addEventListener('click', () => sendCommand('CONTINUOUS'));
+    document.getElementById('offBtn').addEventListener('click', () => sendCommand('OFF'));
+</script>
+
+</body>
+</html>
